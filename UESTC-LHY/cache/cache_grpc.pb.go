@@ -23,7 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CacheClient interface {
 	GetCache(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetReply, error)
-	SetCache(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetReply, error)
+	PostCache(ctx context.Context, in *PostRequest, opts ...grpc.CallOption) (*PostReply, error)
 	DeleteCache(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteReply, error)
 }
 
@@ -44,9 +44,9 @@ func (c *cacheClient) GetCache(ctx context.Context, in *GetRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *cacheClient) SetCache(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetReply, error) {
-	out := new(SetReply)
-	err := c.cc.Invoke(ctx, "/cache.Cache/SetCache", in, out, opts...)
+func (c *cacheClient) PostCache(ctx context.Context, in *PostRequest, opts ...grpc.CallOption) (*PostReply, error) {
+	out := new(PostReply)
+	err := c.cc.Invoke(ctx, "/cache.Cache/PostCache", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (c *cacheClient) DeleteCache(ctx context.Context, in *DeleteRequest, opts .
 // for forward compatibility
 type CacheServer interface {
 	GetCache(context.Context, *GetRequest) (*GetReply, error)
-	SetCache(context.Context, *SetRequest) (*SetReply, error)
+	PostCache(context.Context, *PostRequest) (*PostReply, error)
 	DeleteCache(context.Context, *DeleteRequest) (*DeleteReply, error)
 	mustEmbedUnimplementedCacheServer()
 }
@@ -79,8 +79,8 @@ type UnimplementedCacheServer struct {
 func (UnimplementedCacheServer) GetCache(context.Context, *GetRequest) (*GetReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCache not implemented")
 }
-func (UnimplementedCacheServer) SetCache(context.Context, *SetRequest) (*SetReply, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetCache not implemented")
+func (UnimplementedCacheServer) PostCache(context.Context, *PostRequest) (*PostReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PostCache not implemented")
 }
 func (UnimplementedCacheServer) DeleteCache(context.Context, *DeleteRequest) (*DeleteReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteCache not implemented")
@@ -116,20 +116,20 @@ func _Cache_GetCache_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Cache_SetCache_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetRequest)
+func _Cache_PostCache_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PostRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CacheServer).SetCache(ctx, in)
+		return srv.(CacheServer).PostCache(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/cache.Cache/SetCache",
+		FullMethod: "/cache.Cache/PostCache",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CacheServer).SetCache(ctx, req.(*SetRequest))
+		return srv.(CacheServer).PostCache(ctx, req.(*PostRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -164,8 +164,8 @@ var Cache_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Cache_GetCache_Handler,
 		},
 		{
-			MethodName: "SetCache",
-			Handler:    _Cache_SetCache_Handler,
+			MethodName: "PostCache",
+			Handler:    _Cache_PostCache_Handler,
 		},
 		{
 			MethodName: "DeleteCache",

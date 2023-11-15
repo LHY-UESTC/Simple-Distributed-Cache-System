@@ -17,8 +17,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// TODO:Cache数据以既定策略（round-robin或hash均可，不做限定）分布在不同节点（不考虑副本存储）
-// TODO:互斥锁保护共享资源
 var server cacheServer       // 服务器实例
 var address [4]string        // 地址
 var client [2]pb.CacheClient // 此数组存储了两个客户端对象，用于与两个不同的 RPC 服务器建立通信
@@ -64,16 +62,16 @@ func CacheGet(client pb.CacheClient, req *pb.GetRequest) *pb.GetReply {
 }
 
 // 发送 gRPC 客户端的 Post 请求
-func CacheSet(client pb.CacheClient, req *pb.SetRequest) *pb.SetReply {
+func CachePost(client pb.CacheClient, req *pb.PostRequest) *pb.PostReply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// 发送 Post 请求
-	SetReply, err := client.SetCache(ctx, req)
+	PostReply, err := client.PostCache(ctx, req)
 	if err != nil {
-		fmt.Println("client.SetCache failed.")
-		return SetReply
+		fmt.Println("client.PostCache failed.")
+		return PostReply
 	}
-	return SetReply
+	return PostReply
 }
 
 // 发送 gRPC 客户端的 Delete 请求
@@ -118,8 +116,7 @@ func setAddress() {
 // 处理 HTTP GET 请求
 // 函数接受两个参数：w 是 http.ResponseWriter 类型，用于构造 HTTP 响应；key 是一个字符串类型的参数，表示请求的键名
 func handleGet(w http.ResponseWriter, key string) {
-	fmt.Println("get", key)
-
+	// fmt.Println("get", key)
 	// 检查 server.cache 中是否存在键名为 key 的缓存项
 	server.mutex.Lock()
 	if value, ok := server.cache[key]; ok {
@@ -154,7 +151,7 @@ func handleGet(w http.ResponseWriter, key string) {
 }
 
 // 处理 HTTP POST 请求
-func handleSet(w http.ResponseWriter, jsonstr string) {
+func handlePost(w http.ResponseWriter, jsonstr string) {
 	// 使用了一个正则表达式，将形如 {"key":"value"} 的 JSON 字符串中的键名和键值提取出来
 	reg := regexp.MustCompile(`{\s*"(.*)"\s*:\s*"(.*)"\s*}`)
 	if reg == nil {
@@ -164,7 +161,7 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 	result := reg.FindAllStringSubmatch(jsonstr, -1)
 	key, value := result[0][1], result[0][2]
 
-	fmt.Println("set", key, ":", value)
+	// fmt.Println("set", key, ":", value)
 	// 存在于当前server中，直接修改即可
 	server.mutex.Lock()
 	if _, ok := server.cache[key]; ok {
@@ -177,16 +174,16 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 	// 可能在其他server中，需要向其他server发送请求
 	GetReply1 := CacheGet(client[0], &pb.GetRequest{Key: key})
 	if GetReply1.IsOk == 1 {
-		SetRely1 := CacheSet(client[0], &pb.SetRequest{Key: key, Value: value})
-		if SetRely1.IsOk == 1 {
+		PostRely1 := CachePost(client[0], &pb.PostRequest{Key: key, Value: value})
+		if PostRely1.IsOk == 1 {
 			w.WriteHeader(http.StatusOK)
 		}
 		return
 	}
 	GetReply2 := CacheGet(client[1], &pb.GetRequest{Key: key})
 	if GetReply2.IsOk == 1 {
-		SetRely2 := CacheSet(client[1], &pb.SetRequest{Key: key, Value: value})
-		if SetRely2.IsOk == 1 {
+		PostRely2 := CachePost(client[1], &pb.PostRequest{Key: key, Value: value})
+		if PostRely2.IsOk == 1 {
 			w.WriteHeader(http.StatusOK)
 		}
 		return
@@ -201,7 +198,7 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 
 // 处理 HTTP DELETE 请求
 func handleDelete(w http.ResponseWriter, key string) {
-	fmt.Println("delete", key)
+	// fmt.Println("delete", key)
 	server.mutex.Lock()
 	if _, ok := server.cache[key]; ok {
 		// 删除 server.cache 中的对应缓存项
@@ -240,7 +237,7 @@ func handleHttpRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Unable to read request body.", http.StatusInternalServerError)
 			return
 		}
-		handleSet(w, string(body))
+		handlePost(w, string(body))
 	} else if r.Method == http.MethodDelete { // 请求的方法是 DELETE
 		handleDelete(w, r.URL.String()[1:])
 	} else {
@@ -272,12 +269,12 @@ func (s *cacheServer) GetCache(ctx context.Context, req *pb.GetRequest) (*pb.Get
 	return &pb.GetReply{IsOk: 0}, nil
 }
 
-// gRPC 服务器的 Set 请求处理程序
-func (s *cacheServer) SetCache(ctx context.Context, req *pb.SetRequest) (*pb.SetReply, error) {
+// gRPC 服务器的 Post 请求处理程序
+func (s *cacheServer) PostCache(ctx context.Context, req *pb.PostRequest) (*pb.PostReply, error) {
 	s.mutex.Lock()
 	s.cache[req.Key] = req.Value
 	s.mutex.Unlock()
-	return &pb.SetReply{IsOk: 1}, nil
+	return &pb.PostReply{IsOk: 1}, nil
 }
 
 // gRPC 服务器的 Delete 请求处理程序

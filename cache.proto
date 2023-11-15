@@ -6,7 +6,7 @@ package cache;
 
 service Cache {
   rpc GetCache (GetRequest) returns (GetReply) {}
-  rpc SetCache (SetRequest) returns (SetReply) {}
+  rpc PostCache (PostRequest) returns (PostReply) {}
   rpc DeleteCache (DeleteRequest) returns (DeleteReply) {}
 }
 
@@ -20,12 +20,12 @@ message GetReply {
     int32 isOk = 3;
 }
 
-message SetRequest {
+message PostRequest {
     string key = 1;
     string value = 2;
 }
 
-message SetReply {
+message PostReply {
     int32 isOk = 1;
 }
 
