@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -17,6 +18,7 @@ import (
 )
 
 // TODO:Cache数据以既定策略（round-robin或hash均可，不做限定）分布在不同节点（不考虑副本存储）
+// TODO:互斥锁保护共享资源
 var server cacheServer       // 服务器实例
 var address [4]string        // 地址
 var client [2]pb.CacheClient // 此数组存储了两个客户端对象，用于与两个不同的 RPC 服务器建立通信
@@ -65,7 +67,7 @@ func CacheGet(client pb.CacheClient, req *pb.GetRequest) *pb.GetReply {
 func CacheSet(client pb.CacheClient, req *pb.SetRequest) *pb.SetReply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// 发送 Set 请求
+	// 发送 Post 请求
 	SetReply, err := client.SetCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.SetCache failed.")
@@ -119,16 +121,19 @@ func handleGet(w http.ResponseWriter, key string) {
 	fmt.Println("get", key)
 
 	// 检查 server.cache 中是否存在键名为 key 的缓存项
-	if _, ok := server.cache[key]; ok {
+	server.mutex.Lock()
+	if value, ok := server.cache[key]; ok {
+		server.mutex.Unlock()
 		// 将 HTTP 响应的状态码设置为 200 OK
 		w.WriteHeader(http.StatusOK)
 		// 将 Content-Type 头部设置为 application/json,表示响应的内容类型为 JSON 格式
 		w.Header().Set("Content-Type", "application/json")
 		// 将 JSON 格式的响应数据写入到 `w` 中，即向客户端返回一个 JSON 字符串，格式为 `{"key":"value"}`
 		// 其中 `key` 是请求的键名，`value` 是 `server.cache[key]` 对应的值
-		fmt.Fprintln(w, "{\""+key+"\":\""+server.cache[key]+"\"}")
+		fmt.Fprintln(w, "{\""+key+"\":\""+value+"\"}")
 		return
 	}
+	server.mutex.Unlock()
 	// 如果 server.cache 中不存在键名为 key 的缓存项,就通过 gRPC 客户端向两个缓存服务器发送 Get 请求
 	GetReply1 := CacheGet(client[0], &pb.GetRequest{Key: key})
 	if GetReply1.IsOk == 1 {
@@ -161,11 +166,14 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 
 	fmt.Println("set", key, ":", value)
 	// 存在于当前server中，直接修改即可
+	server.mutex.Lock()
 	if _, ok := server.cache[key]; ok {
 		server.cache[key] = value
+		server.mutex.Unlock()
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	server.mutex.Unlock()
 	// 可能在其他server中，需要向其他server发送请求
 	GetReply1 := CacheGet(client[0], &pb.GetRequest{Key: key})
 	if GetReply1.IsOk == 1 {
@@ -184,7 +192,9 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 		return
 	}
 	// 说明是个新的key
+	server.mutex.Lock()
 	server.cache[key] = value
+	server.mutex.Unlock()
 	// 将 HTTP 响应的状态码设置为 200 OK
 	w.WriteHeader(http.StatusOK)
 }
@@ -192,21 +202,24 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 // 处理 HTTP DELETE 请求
 func handleDelete(w http.ResponseWriter, key string) {
 	fmt.Println("delete", key)
+	server.mutex.Lock()
 	if _, ok := server.cache[key]; ok {
 		// 删除 server.cache 中的对应缓存项
 		delete(server.cache, key)
+		server.mutex.Unlock()
 		// 将 HTTP 响应的状态码设置为 200 OK，表示删除成功
 		w.WriteHeader(http.StatusOK)
 		// 将字符串 "1" 写入 `w` 中，即向客户端返回一个值为 "1" 的响应
 		fmt.Fprintln(w, "1")
 		return
 	}
+	server.mutex.Unlock()
 	// 通过 gRPC 客户端向两个缓存服务器发送删除缓存项的请求
 	DeleteReply1 := CacheDelete(client[0], &pb.DeleteRequest{Key: key})
 	DeleteReply2 := CacheDelete(client[1], &pb.DeleteRequest{Key: key})
 	if DeleteReply1.IsOk == 1 || DeleteReply2.IsOk == 1 {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "0")
+		fmt.Fprintln(w, "1")
 		return
 	}
 	// 将字符串 "0" 写入 w 中，即向客户端返回一个值为 "0" 的响应，表示缓存项不存在
@@ -242,31 +255,41 @@ type cacheServer struct {
 	pb.UnimplementedCacheServer
 	// 服务器的内存缓存
 	cache map[string]string
+	// 互斥锁保护共享内存资源
+	mutex sync.Mutex
 }
 
 // gRPC 服务器的 Get 请求处理程序，cache_grpc.pb.go中调用
 // ctx：context.Context 类型的参数，表示请求的上下文。它提供了请求的元数据和取消信号等功能
 // req：*pb.GetRequest 类型的参数，表示 Get 请求的内容。pb.GetRequest 是一个自动生成的结构体类型，包含了 gRPC 定义文件中定义的请求字段
 func (s *cacheServer) GetCache(ctx context.Context, req *pb.GetRequest) (*pb.GetReply, error) {
-	if _, ok := s.cache[req.Key]; ok {
-		return &pb.GetReply{IsOk: 1, Key: req.Key, Value: s.cache[req.Key]}, nil
+	s.mutex.Lock()
+	if value, ok := s.cache[req.Key]; ok {
+		s.mutex.Unlock()
+		return &pb.GetReply{IsOk: 1, Key: req.Key, Value: value}, nil
 	}
+	s.mutex.Unlock()
 	return &pb.GetReply{IsOk: 0}, nil
 }
 
 // gRPC 服务器的 Set 请求处理程序
 func (s *cacheServer) SetCache(ctx context.Context, req *pb.SetRequest) (*pb.SetReply, error) {
+	s.mutex.Lock()
 	s.cache[req.Key] = req.Value
+	s.mutex.Unlock()
 	return &pb.SetReply{IsOk: 1}, nil
 }
 
 // gRPC 服务器的 Delete 请求处理程序
 func (s *cacheServer) DeleteCache(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteReply, error) {
 	// IsOk 字段为 1 表示成功删除了一个缓存项，为 0 表示未找到要删除的缓存项
+	s.mutex.Lock()
 	if _, ok := s.cache[req.Key]; ok {
 		delete(s.cache, req.Key)
+		s.mutex.Unlock()
 		return &pb.DeleteReply{IsOk: 1}, nil
 	}
+	s.mutex.Unlock()
 	return &pb.DeleteReply{IsOk: 0}, nil
 }
 
