@@ -9,7 +9,7 @@ protoc --go_out=. cache.proto
 
 protoc --go-grpc_out=. cache.proto
 
-go build
+go build -o ./Simple-Distributed-Cache-System server.go
 # 分别开四个窗口执行下面四条语句
 ./Simple-Distributed-Cache-System 1
 
