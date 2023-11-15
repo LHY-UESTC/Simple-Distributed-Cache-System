@@ -19,54 +19,62 @@ import (
 // TODO:Cache数据以既定策略（round-robin或hash均可，不做限定）分布在不同节点（不考虑副本存储）
 var server cacheServer       // 服务器实例
 var address [4]string        // 地址
-var client [2]pb.CacheClient // 2 rpc client to communicate with the other 2 rpc server
-var conn [2]*grpc.ClientConn // 2 connection for 2 rpc client
+var client [2]pb.CacheClient // 此数组存储了两个客户端对象，用于与两个不同的 RPC 服务器建立通信
+var conn [2]*grpc.ClientConn // 存储了两个连接对象，分别用于与两个不同的 RPC 服务器建立连接
 
 func setupClient() {
+	// 存储 gRPC 连接选项的切片
 	var opts []grpc.DialOption
 	var err error
+	// 将安全传输凭证选项添加到 opts 中，insecure.NewCredentials() 创建一个不安全的传输凭证，表示在连接时不进行身份验证
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
+	// 使用 opts 和 address[2] 连接到指定的 gRPC 服务器。将返回的连接对象赋值给 conn[0]
 	conn[0], err = grpc.Dial(address[2], opts...)
 	if err != nil {
 		fmt.Printf("fail to dial: %v", err)
 	}
 	fmt.Println("Set up client for", address[2])
-
+	// 使用 opts 和 address[3] 连接到指定的 gRPC 服务器。将返回的连接对象赋值给 conn[1]
 	conn[1], err = grpc.Dial(address[3], opts...)
 	if err != nil {
 		fmt.Printf("fail to dial: %v", err)
 	}
 	fmt.Println("Set up client for", address[3])
-
+	// 使用 pb.NewCacheClient() 创建两个 pb.CacheClient 类型的客户端对象，并将其赋值给 client[0] 和 client[1]
 	client[0] = pb.NewCacheClient(conn[0])
 	client[1] = pb.NewCacheClient(conn[1])
 }
 
-// rpc client Get request
+// 发送 gRPC 客户端的 Get 请求
 func CacheGet(client pb.CacheClient, req *pb.GetRequest) {
+	// 使用 context.Background() 创建一个空的上下文对象
+	// 并使用 context.WithTimeout 方法设置一个超时时间为 10 秒的上下文对象 ctx
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 延迟执行 cancel 函数，以确保在函数返回之前取消上下文对象，释放相关资源
 	defer cancel()
+	// 发送 Get 请求
 	_, err := client.GetCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.GetCache failed.")
 	}
 }
 
-// rpc client Set request
+// 发送 gRPC 客户端的 Post 请求
 func CacheSet(client pb.CacheClient, req *pb.SetRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// 发送 Set 请求
 	_, err := client.SetCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.SetCache failed.")
 	}
 }
 
-// rpc client Delete request
+// 发送 gRPC 客户端的 Delete 请求
 func CacheDelete(client pb.CacheClient, req *pb.DeleteRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// 发送 Delete 请求
 	_, err := client.DeleteCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.DeleteCache failed.")
