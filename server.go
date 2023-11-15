@@ -46,39 +46,45 @@ func setupClient() {
 }
 
 // 发送 gRPC 客户端的 Get 请求
-func CacheGet(client pb.CacheClient, req *pb.GetRequest) {
+func CacheGet(client pb.CacheClient, req *pb.GetRequest) *pb.GetReply {
 	// 使用 context.Background() 创建一个空的上下文对象
 	// 并使用 context.WithTimeout 方法设置一个超时时间为 10 秒的上下文对象 ctx
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	// 延迟执行 cancel 函数，以确保在函数返回之前取消上下文对象，释放相关资源
 	defer cancel()
 	// 发送 Get 请求
-	_, err := client.GetCache(ctx, req)
+	GetReply, err := client.GetCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.GetCache failed.")
+		return GetReply
 	}
+	return GetReply
 }
 
 // 发送 gRPC 客户端的 Post 请求
-func CacheSet(client pb.CacheClient, req *pb.SetRequest) {
+func CacheSet(client pb.CacheClient, req *pb.SetRequest) *pb.SetReply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// 发送 Set 请求
-	_, err := client.SetCache(ctx, req)
+	SetReply, err := client.SetCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.SetCache failed.")
+		return SetReply
 	}
+	return SetReply
 }
 
 // 发送 gRPC 客户端的 Delete 请求
-func CacheDelete(client pb.CacheClient, req *pb.DeleteRequest) {
+func CacheDelete(client pb.CacheClient, req *pb.DeleteRequest) *pb.DeleteReply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// 发送 Delete 请求
-	_, err := client.DeleteCache(ctx, req)
+	DeleteReply, err := client.DeleteCache(ctx, req)
 	if err != nil {
 		fmt.Println("client.DeleteCache failed.")
+		return DeleteReply
 	}
+	return DeleteReply
 }
 
 func setAddress() {
@@ -123,7 +129,22 @@ func handleGet(w http.ResponseWriter, key string) {
 		fmt.Fprintln(w, "{\""+key+"\":\""+server.cache[key]+"\"}")
 		return
 	}
-	// 如果 server.cache 中不存在键名为 key 的缓存项,将 HTTP 响应的状态码设置为 404 Not Found，表示请求的资源不存在
+	// 如果 server.cache 中不存在键名为 key 的缓存项,就通过 gRPC 客户端向两个缓存服务器发送 Get 请求
+	GetReply1 := CacheGet(client[0], &pb.GetRequest{Key: key})
+	if GetReply1.IsOk == 1 {
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, "{\""+key+"\":\""+GetReply1.Value+"\"}")
+		return
+	}
+	GetReply2 := CacheGet(client[1], &pb.GetRequest{Key: key})
+	if GetReply2.IsOk == 1 {
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, "{\""+key+"\":\""+GetReply2.Value+"\"}")
+		return
+	}
+	// 将 HTTP 响应的状态码设置为 404 Not Found，表示请求的资源不存在
 	w.WriteHeader(http.StatusNotFound)
 }
 
@@ -139,11 +160,31 @@ func handleSet(w http.ResponseWriter, jsonstr string) {
 	key, value := result[0][1], result[0][2]
 
 	fmt.Println("set", key, ":", value)
-	// 将 value 存储在以 key 为键的缓存项中
+	// 存在于当前server中，直接修改即可
+	if _, ok := server.cache[key]; ok {
+		server.cache[key] = value
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	// 可能在其他server中，需要向其他server发送请求
+	GetReply1 := CacheGet(client[0], &pb.GetRequest{Key: key})
+	if GetReply1.IsOk == 1 {
+		SetRely1 := CacheSet(client[0], &pb.SetRequest{Key: key, Value: value})
+		if SetRely1.IsOk == 1 {
+			w.WriteHeader(http.StatusOK)
+		}
+		return
+	}
+	GetReply2 := CacheGet(client[1], &pb.GetRequest{Key: key})
+	if GetReply2.IsOk == 1 {
+		SetRely2 := CacheSet(client[1], &pb.SetRequest{Key: key, Value: value})
+		if SetRely2.IsOk == 1 {
+			w.WriteHeader(http.StatusOK)
+		}
+		return
+	}
+	// 说明是个新的key
 	server.cache[key] = value
-	// 通过 gRPC 客户端向两个缓存服务器发送设置缓存项的请求
-	CacheSet(client[0], &pb.SetRequest{Key: key, Value: value})
-	CacheSet(client[1], &pb.SetRequest{Key: key, Value: value})
 	// 将 HTTP 响应的状态码设置为 200 OK
 	w.WriteHeader(http.StatusOK)
 }
@@ -154,13 +195,18 @@ func handleDelete(w http.ResponseWriter, key string) {
 	if _, ok := server.cache[key]; ok {
 		// 删除 server.cache 中的对应缓存项
 		delete(server.cache, key)
-		// 通过 gRPC 客户端向两个缓存服务器发送删除缓存项的请求
-		CacheDelete(client[0], &pb.DeleteRequest{Key: key})
-		CacheDelete(client[1], &pb.DeleteRequest{Key: key})
 		// 将 HTTP 响应的状态码设置为 200 OK，表示删除成功
 		w.WriteHeader(http.StatusOK)
 		// 将字符串 "1" 写入 `w` 中，即向客户端返回一个值为 "1" 的响应
 		fmt.Fprintln(w, "1")
+		return
+	}
+	// 通过 gRPC 客户端向两个缓存服务器发送删除缓存项的请求
+	DeleteReply1 := CacheDelete(client[0], &pb.DeleteRequest{Key: key})
+	DeleteReply2 := CacheDelete(client[1], &pb.DeleteRequest{Key: key})
+	if DeleteReply1.IsOk == 1 || DeleteReply2.IsOk == 1 {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "0")
 		return
 	}
 	// 将字符串 "0" 写入 w 中，即向客户端返回一个值为 "0" 的响应，表示缓存项不存在
@@ -202,23 +248,26 @@ type cacheServer struct {
 // ctx：context.Context 类型的参数，表示请求的上下文。它提供了请求的元数据和取消信号等功能
 // req：*pb.GetRequest 类型的参数，表示 Get 请求的内容。pb.GetRequest 是一个自动生成的结构体类型，包含了 gRPC 定义文件中定义的请求字段
 func (s *cacheServer) GetCache(ctx context.Context, req *pb.GetRequest) (*pb.GetReply, error) {
-	return &pb.GetReply{Key: req.Key, Value: s.cache[req.Key]}, nil
+	if _, ok := s.cache[req.Key]; ok {
+		return &pb.GetReply{IsOk: 1, Key: req.Key, Value: s.cache[req.Key]}, nil
+	}
+	return &pb.GetReply{IsOk: 0}, nil
 }
 
 // gRPC 服务器的 Set 请求处理程序
 func (s *cacheServer) SetCache(ctx context.Context, req *pb.SetRequest) (*pb.SetReply, error) {
 	s.cache[req.Key] = req.Value
-	return &pb.SetReply{}, nil
+	return &pb.SetReply{IsOk: 1}, nil
 }
 
 // gRPC 服务器的 Delete 请求处理程序
 func (s *cacheServer) DeleteCache(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteReply, error) {
-	// Num 字段为 1 表示成功删除了一个缓存项，为 0 表示未找到要删除的缓存项
+	// IsOk 字段为 1 表示成功删除了一个缓存项，为 0 表示未找到要删除的缓存项
 	if _, ok := s.cache[req.Key]; ok {
 		delete(s.cache, req.Key)
-		return &pb.DeleteReply{Num: 1}, nil
+		return &pb.DeleteReply{IsOk: 1}, nil
 	}
-	return &pb.DeleteReply{Num: 0}, nil
+	return &pb.DeleteReply{IsOk: 0}, nil
 }
 
 // 启动Http服务器
