@@ -1,0 +1,22 @@
+# 指定所使用的 Docker Compose 的版本
+version: '3'
+# 定义了一个或多个服务
+# luohongyu-sdcs-server1：这是一个服务的名称。
+# image: luohongyu_sdcs_server:v1.0：指定了要使用的镜像及其版本。这里使用了名为 luohongyu_sdcs_server 版本为 v1.0 的镜像。
+# network_mode: host：将容器的网络模式设置为 host，这意味着容器将与主机共享网络命名空间，可以直接使用主机的网络接口。
+# command: /bin/bash -c "./Simple-Distributed-Cache-System 1"：指定容器启动时要执行的命令
+services:
+  luohongyu-sdcs-server1:
+    image: luohongyu_sdcs_server:v1.0
+    network_mode: host
+    command: /bin/bash -c "./Simple-Distributed-Cache-System 1"
+
+  luohongyu-sdcs-server2:
+    image: luohongyu_sdcs_server:v1.0
+    network_mode: host
+    command: /bin/bash -c "./Simple-Distributed-Cache-System 2"
+
+  luohongyu-sdcs-server3:
+    image: luohongyu_sdcs_server:v1.0
+    network_mode: host
+    command: /bin/bash -c "./Simple-Distributed-Cache-System 3"
