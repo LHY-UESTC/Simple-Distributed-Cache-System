@@ -7,16 +7,25 @@ version: '3'
 # command: /bin/bash -c "./Simple-Distributed-Cache-System 1"：指定容器启动时要执行的命令
 services:
   luohongyu-sdcs-server1:
+    build:
+      context: ..
+      dockerfile: Simple-Distributed-Cache-System/Dockerfile
     image: luohongyu_sdcs_server:v1.0
     network_mode: host
     command: /bin/bash -c "./Simple-Distributed-Cache-System 1"
 
   luohongyu-sdcs-server2:
+    build:
+      context: ..
+      dockerfile: Simple-Distributed-Cache-System/Dockerfile
     image: luohongyu_sdcs_server:v1.0
     network_mode: host
     command: /bin/bash -c "./Simple-Distributed-Cache-System 2"
 
   luohongyu-sdcs-server3:
+    build:
+      context: ..
+      dockerfile: Simple-Distributed-Cache-System/Dockerfile
     image: luohongyu_sdcs_server:v1.0
     network_mode: host
     command: /bin/bash -c "./Simple-Distributed-Cache-System 3"

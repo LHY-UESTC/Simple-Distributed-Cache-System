@@ -7,6 +7,8 @@ COPY Simple-Distributed-Cache-System/ /app_build/
 # 使用 RUN 指令运行一系列命令
 RUN apt-get update
 RUN apt-get install --reinstall ca-certificates -y
+RUN apt-get install wget -y
+RUN wget https://studygolang.com/dl/golang/go1.20.3.linux-amd64.tar.gz
 RUN tar -C /usr/local -xzf go1.20.3.linux-amd64.tar.gz
 RUN rm go1.20.3.linux-amd64.tar.gz
 
