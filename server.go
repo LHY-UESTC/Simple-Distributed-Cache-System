@@ -31,15 +31,15 @@ func setupClient() {
 	// 使用 opts 和 address[2] 连接到指定的 gRPC 服务器。将返回的连接对象赋值给 conn[0]
 	conn[0], err = grpc.Dial(address[2], opts...)
 	if err != nil {
-		fmt.Printf("fail to dial: %v", err)
+		fmt.Printf("dial失败: %v", err)
 	}
-	fmt.Println("Set up client for", address[2])
+	fmt.Println("设置客户端:", address[2])
 	// 使用 opts 和 address[3] 连接到指定的 gRPC 服务器。将返回的连接对象赋值给 conn[1]
 	conn[1], err = grpc.Dial(address[3], opts...)
 	if err != nil {
-		fmt.Printf("fail to dial: %v", err)
+		fmt.Printf("dial失败: %v", err)
 	}
-	fmt.Println("Set up client for", address[3])
+	fmt.Println("设置客户端:", address[3])
 	// 使用 pb.NewCacheClient() 创建两个 pb.CacheClient 类型的客户端对象，并将其赋值给 client[0] 和 client[1]
 	client[0] = pb.NewCacheClient(conn[0])
 	client[1] = pb.NewCacheClient(conn[1])
@@ -55,7 +55,7 @@ func CacheGet(client pb.CacheClient, req *pb.GetRequest) *pb.GetReply {
 	// 发送 Get 请求
 	GetReply, err := client.GetCache(ctx, req)
 	if err != nil {
-		fmt.Println("client.GetCache failed.")
+		fmt.Println("client.GetCache 失败")
 		return GetReply
 	}
 	return GetReply
@@ -68,7 +68,7 @@ func CachePost(client pb.CacheClient, req *pb.PostRequest) *pb.PostReply {
 	// 发送 Post 请求
 	PostReply, err := client.PostCache(ctx, req)
 	if err != nil {
-		fmt.Println("client.PostCache failed.")
+		fmt.Println("client.PostCache 失败")
 		return PostReply
 	}
 	return PostReply
@@ -81,7 +81,7 @@ func CacheDelete(client pb.CacheClient, req *pb.DeleteRequest) *pb.DeleteReply {
 	// 发送 Delete 请求
 	DeleteReply, err := client.DeleteCache(ctx, req)
 	if err != nil {
-		fmt.Println("client.DeleteCache failed.")
+		fmt.Println("client.DeleteCache 失败")
 		return DeleteReply
 	}
 	return DeleteReply
@@ -109,7 +109,7 @@ func setAddress() {
 		address[2] = "127.0.0.1:9530"
 		address[3] = "127.0.0.1:9531"
 	} else {
-		fmt.Println("only 3 cacheserver.")
+		fmt.Println("只有3个缓存服务器.")
 	}
 }
 
@@ -295,22 +295,22 @@ func startHttpServer() {
 	// 当HTTP请求的路径为"/"时，将调用handleHttpRequest函数来处理该请求
 	http.HandleFunc("/", handleHttpRequest)
 	// HTTP服务器正在监听的地址
-	fmt.Println("Listening http on", address[0])
+	fmt.Println("HTTP服务器正在监听的地址:", address[0])
 	// 启动HTTP服务器并开始监听指定的地址
 	err := http.ListenAndServe(address[0], nil)
 	if err != nil {
-		fmt.Println("Listten failed:", err)
+		fmt.Println("监听失败:", err)
 	}
 }
 
 // 启动 gRPC 服务器
 func startRpcServer() {
 	// gRPC 服务器正在监听指定地址
-	fmt.Println("Listening rpc on", address[1])
+	fmt.Println("gRPC 服务器正在监听指定地址:", address[1])
 	// 创建一个 TCP 监听器 lis，该监听器用于接收客户端的连接请求
 	lis, err := net.Listen("tcp", address[1])
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("监听失败: %v", err)
 	}
 	// 函数创建一个 gRPC 服务器实例 grpcServer。通过传入 opts 切片作为参数，可以指定服务器的选项
 	var opts []grpc.ServerOption
@@ -325,7 +325,7 @@ func startRpcServer() {
 func main() {
 	// 检查命令行参数的数量是否为2
 	if len(os.Args) != 2 {
-		fmt.Println("please specify server index(1-3).")
+		fmt.Println("请指定服务器(1-3)")
 		return
 	}
 	// 设置服务器的地址

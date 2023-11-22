@@ -5,9 +5,10 @@ WORKDIR /app_build
 # 将当前目录下的 Simple-Distributed-Cache-System 目录复制到容器的 /app_build 目录下
 COPY Simple-Distributed-Cache-System/ /app_build/
 # 使用 RUN 指令运行一系列命令
-RUN apt-get update && apt-get install --reinstall ca-certificates -y \
-    && tar -C /usr/local -xzf go1.20.3.linux-amd64.tar.gz\
-    && rm go1.20.3.linux-amd64.tar.gz
+RUN apt-get update
+RUN apt-get install --reinstall ca-certificates -y
+RUN tar -C /usr/local -xzf go1.20.3.linux-amd64.tar.gz
+RUN rm go1.20.3.linux-amd64.tar.gz
 
 # 为go编译器设置env
 ENV GOPATH="/root/go"
